@@ -524,3 +524,72 @@ import Testing
     #expect(decoded == layer)
 }
 
+
+@Test func videoLayerPlaysInsideItsRegion() async throws {
+    /// The device-screen contract: a video layer's decoded frames land
+    /// inside the region the layer declared, and nowhere else. Proven
+    /// through the whole export path — synthesize a red clip, play it in
+    /// a layer over a blue ground, export, decode a frame back, and ask
+    /// the pixels.
+    let directory = FileManager.default.temporaryDirectory
+        .appendingPathComponent("canvaskit-videolayer-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+
+    /// The screen content: half a second of solid red.
+    let clip = directory.appendingPathComponent("screen.mp4")
+    let redFrame: CGImage = try {
+        let context = try #require(CGContext(
+            data: nil, width: 96, height: 96,
+            bitsPerComponent: 8, bytesPerRow: 0,
+            space: CGColorSpace(name: CGColorSpace.sRGB)!,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ))
+        context.setFillColor(CGColor(srgbRed: 1, green: 0, blue: 0, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: 96, height: 96))
+        return try #require(context.makeImage())
+    }()
+    try await VideoExporter.write(
+        width: 96, height: 96, duration: 0.5, framesPerSecond: 10, to: clip
+    ) { _ in redFrame }
+
+    /// The deck: one slide, blue ground, the clip playing in the middle
+    /// half of the frame.
+    let deck = SlideDeck(
+        canvas: Canvas(width: 240, height: 240),
+        brand: BrandKit(backgroundColor: SlideColor("#0000FF"), showsFooter: false),
+        slides: [Slide(layers: [
+            .video(path: clip.path, region: UnitRect(x: 0.25, y: 0.25, width: 0.5, height: 0.5),
+                   cornerRadius: 0, scaling: "fill")
+        ], duration: 0.4)]
+    )
+    let reel = directory.appendingPathComponent("reel.mp4")
+    try await VideoExporter.export(deck: deck, to: reel, motion: .none)
+
+    /// Read a mid-clip frame back and ask where the red went.
+    let generator = AVAssetImageGenerator(asset: AVURLAsset(url: reel))
+    generator.requestedTimeToleranceBefore = .zero
+    generator.requestedTimeToleranceAfter = .zero
+    let frame = try await generator.image(at: CMTime(seconds: 0.2, preferredTimescale: 600)).image
+
+    func sample(_ x: Int, _ y: Int) throws -> (red: Double, blue: Double) {
+        var data = [UInt8](repeating: 0, count: 4)
+        let context = try #require(CGContext(
+            data: &data, width: 1, height: 1,
+            bitsPerComponent: 8, bytesPerRow: 4,
+            space: CGColorSpace(name: CGColorSpace.sRGB)!,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ))
+        context.draw(frame, in: CGRect(x: -x, y: -(frame.height - 1 - y), width: frame.width, height: frame.height))
+        return (Double(data[0]) / 255, Double(data[2]) / 255)
+    }
+
+    /// Center of the region: the clip. Corners: the ground. Compression
+    /// smears edges, so the samples stay well clear of the boundary.
+    let center = try sample(120, 120)
+    #expect(center.red > 0.5 && center.blue < 0.4,
+            "the region's center must show the playing clip — got \(center)")
+    let corner = try sample(12, 12)
+    #expect(corner.blue > 0.5 && corner.red < 0.4,
+            "outside the region must stay the ground — got \(corner)")
+}
