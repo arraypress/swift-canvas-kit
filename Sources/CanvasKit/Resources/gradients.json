@@ -1,0 +1,11 @@
+[
+  { "name": "sunset-glow",  "colors": ["#1F1147", "#A83279", "#FF7E5F"],            "angle": 160 },
+  { "name": "aurora-night", "colors": ["#020C1B", "#04294F", "#0F766E", "#34D399"], "angle": 200 },
+  { "name": "ember-dusk",   "colors": ["#1A0F0B", "#57150B", "#A6350F", "#F97316"], "angle": 165 },
+  { "name": "violet-hour",  "colors": ["#0F0524", "#4C1D95", "#A855F7"],            "angle": 155 },
+  { "name": "ocean-depth",  "colors": ["#020617", "#0C4A6E", "#0891B2"],            "angle": 170 },
+  { "name": "solar-flare",  "colors": ["#B45309", "#EA580C", "#FACC15"],            "angle": 150 },
+  { "name": "candy-wash",   "colors": ["#F472B6", "#C4B5FD", "#7DD3FC"],            "angle": 200 },
+  { "name": "honey-milk",   "colors": ["#FFFBEB", "#FEF3C7", "#FDE68A"],            "angle": 170 },
+  { "name": "morning-sky",  "colors": ["#E3F2FF", "#CFE8FF"],                       "angle": 165 }
+]

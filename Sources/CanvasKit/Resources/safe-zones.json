@@ -1,0 +1,43 @@
+[
+  {
+    "canvas": "tiktok",
+    "zones": [
+      { "name": "TikTok action rail", "x": 0.86, "y": 0.30, "width": 0.14, "height": 0.55 },
+      { "name": "TikTok caption band", "x": 0.0, "y": 0.85, "width": 1.0, "height": 0.15 }
+    ]
+  },
+  {
+    "canvas": "story",
+    "zones": [
+      { "name": "action rail (TikTok/Reels)", "x": 0.86, "y": 0.30, "width": 0.14, "height": 0.55 },
+      { "name": "caption band", "x": 0.0, "y": 0.85, "width": 1.0, "height": 0.15 },
+      { "name": "story header", "x": 0.0, "y": 0.0, "width": 1.0, "height": 0.10 }
+    ]
+  },
+  {
+    "canvas": "ig-story",
+    "zones": [
+      { "name": "Instagram story header", "x": 0.0, "y": 0.0, "width": 1.0, "height": 0.12 },
+      { "name": "Instagram reply band", "x": 0.0, "y": 0.86, "width": 1.0, "height": 0.14 },
+      { "name": "Instagram reel actions", "x": 0.88, "y": 0.35, "width": 0.12, "height": 0.45 }
+    ]
+  },
+  {
+    "canvas": "portrait",
+    "zones": [
+      { "name": "Instagram carousel dots", "x": 0.28, "y": 0.94, "width": 0.44, "height": 0.06 }
+    ]
+  },
+  {
+    "canvas": "ig-tall",
+    "zones": [
+      { "name": "Instagram carousel dots", "x": 0.28, "y": 0.94, "width": 0.44, "height": 0.06 }
+    ]
+  },
+  {
+    "canvas": "square",
+    "zones": [
+      { "name": "Instagram carousel dots", "x": 0.28, "y": 0.94, "width": 0.44, "height": 0.06 }
+    ]
+  }
+]

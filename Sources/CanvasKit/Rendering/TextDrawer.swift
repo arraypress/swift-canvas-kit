@@ -1,0 +1,492 @@
+//
+//  TextDrawer.swift
+//  CanvasKit
+//
+//  Created by David Sherlock on 2026.
+//
+
+import CoreGraphics
+import CoreText
+import Foundation
+
+/// CoreText layout and drawing for one styled text block.
+///
+/// Handles the three things templates rely on: `**accent**` span markup,
+/// auto-shrink so variable-length content stays inside its region, and
+/// vertical alignment within the region. Pure CoreText — no AppKit/UIKit.
+enum TextDrawer {
+
+    /// Draw `text` inside `region` (a CoreGraphics rect, origin bottom-left).
+    static func draw(
+        text: String,
+        style: TextStyle,
+        brand: BrandKit,
+        in region: CGRect,
+        verticalAlignment: String,
+        context: CGContext,
+        scale: CGFloat,
+        collector: WarningCollector? = nil
+    ) {
+        guard !text.isEmpty, region.width > 1, region.height > 1 else { return }
+
+        var size = style.size * Double(scale)
+        let minimum = style.minimumSize * Double(scale)
+        var attributed = attributedString(text: text, style: style, brand: brand, pointSize: size)
+        var height = measuredHeight(attributed, width: region.width)
+
+        /// Auto-shrink: step the point size down until the block fits, or the
+        /// floor is reached. Steps of 6% keep the loop short and the size
+        /// changes invisible. A single word must additionally fit on ONE
+        /// line — height-only fitting happily wraps "Ubiquitou / s" and
+        /// calls it done, which is worse than a smaller word.
+        let mustNotWrap = !text.contains(where: \.isWhitespace)
+        func fits() -> Bool {
+            if height > region.height { return false }
+            if mustNotWrap, measuredWidth(attributed) > region.width { return false }
+            return true
+        }
+        while style.autoShrink, !fits(), size > minimum {
+            size = max(minimum, size * 0.94)
+            attributed = attributedString(text: text, style: style, brand: brand, pointSize: size)
+            height = measuredHeight(attributed, width: region.width)
+        }
+        if !fits(), let collector {
+            collector.report(style.autoShrink ? .shrunkToFloor(text: text) : .overflow(text: text))
+        }
+
+        let textHeight = min(height, region.height)
+        let y: CGFloat
+        switch verticalAlignment {
+        case "middle": y = region.minY + (region.height - textHeight) / 2
+        case "bottom": y = region.minY
+        default: y = region.maxY - textHeight
+        }
+
+        let frameRect = CGRect(x: region.minX, y: y, width: region.width, height: textHeight + 2)
+        let framesetter = CTFramesetterCreateWithAttributedString(attributed)
+        let frame = CTFramesetterCreateFrame(
+            framesetter,
+            CFRange(location: 0, length: 0),
+            CGPath(rect: frameRect, transform: nil),
+            nil
+        )
+
+        context.saveGState()
+        context.textMatrix = .identity
+
+        /// Line pills draw first: one rounded rect per rendered line, sized
+        /// to that line's typographic bounds — the highlighter/sticker idiom.
+        if let pill = style.linePill {
+            drawLinePills(for: frame, in: frameRect, color: pill, context: context, scale: scale)
+        }
+
+        /// Shadow applies to the glyphs only, never the pills — a glowing
+        /// pill reads as a rendering bug, a glowing glyph reads as neon.
+        if let shadow = style.shadowColor {
+            context.setShadow(
+                offset: CGSize(width: 0, height: -style.shadowOffsetY * scale),
+                blur: style.shadowBlur * scale,
+                color: shadow.cgColor
+            )
+        }
+
+        if let gradient = style.gradientColors, gradient.count >= 2 {
+            /// Gradient glyphs: when a glow is declared, a normal pass draws
+            /// it first (the gradient pass clips, and clipped drawing casts
+            /// no shadow), then the glyph outlines become the clip and the
+            /// gradient fills them top to bottom.
+            if style.shadowColor != nil {
+                CTFrameDraw(frame, context)
+                context.setShadow(offset: .zero, blur: 0, color: nil)
+            }
+            context.saveGState()
+            context.textMatrix = .identity
+            context.setTextDrawingMode(.clip)
+            CTFrameDraw(frame, context)
+            if let fill = CGGradient(
+                colorsSpace: CGColorSpace(name: CGColorSpace.sRGB),
+                colors: gradient.map(\.cgColor) as CFArray,
+                locations: nil
+            ) {
+                context.drawLinearGradient(
+                    fill,
+                    start: CGPoint(x: frameRect.midX, y: frameRect.maxY),
+                    end: CGPoint(x: frameRect.midX, y: frameRect.minY),
+                    options: []
+                )
+            }
+            context.restoreGState()
+        } else if style.strokeStyle == .outlined, style.strokeWidth > 0 {
+            /// Two passes, because CoreText's fill-and-stroke mode cannot do
+            /// this cleanly. A glyph outline is often several overlapping
+            /// subpaths — the diagonal of an N laid across its stems, the
+            /// bowls of a B across its spine — and filling hides the seams
+            /// while stroking draws every one of them. The result is a
+            /// lightning bolt through the N and a ghost letter inside the A.
+            ///
+            /// So the keyline goes down first as stroke-only, and the fill
+            /// covers it: what is left showing is the part of the stroke
+            /// outside the glyph, which is the keyline that was wanted, and
+            /// the seams inside are painted over.
+            /// Twice the asked-for width, because CoreText centres a stroke
+            /// on the outline: the fill pass covers the inner half, so a
+            /// keyline drawn at the nominal width comes back half as heavy as
+            /// the same number produces in hollow. Doubling here makes
+            /// `strokeWidth` mean the same thickness in both treatments.
+            let keyline = attributedString(
+                text: text, style: style, brand: brand,
+                pointSize: size, strokeOverride: style.strokeWidth * 2
+            )
+            CTFrameDraw(
+                CTFramesetterCreateFrame(
+                    CTFramesetterCreateWithAttributedString(keyline),
+                    CFRange(location: 0, length: 0),
+                    CGPath(rect: frameRect, transform: nil), nil
+                ),
+                context
+            )
+
+            /// The shadow belongs to the keyline pass only — casting it again
+            /// from the fill doubles it into a smear.
+            context.setShadow(offset: .zero, blur: 0, color: nil)
+
+            let fill = attributedString(
+                text: text, style: style, brand: brand,
+                pointSize: size, strokeOverride: 0
+            )
+            CTFrameDraw(
+                CTFramesetterCreateFrame(
+                    CTFramesetterCreateWithAttributedString(fill),
+                    CFRange(location: 0, length: 0),
+                    CGPath(rect: frameRect, transform: nil), nil
+                ),
+                context
+            )
+        } else {
+            CTFrameDraw(frame, context)
+        }
+        context.restoreGState()
+    }
+
+    /// One rounded background per line, padded a little beyond the glyphs.
+    private static func drawLinePills(
+        for frame: CTFrame,
+        in frameRect: CGRect,
+        color: SlideColor,
+        context: CGContext,
+        scale: CGFloat
+    ) {
+        guard let lines = CTFrameGetLines(frame) as? [CTLine], !lines.isEmpty else { return }
+        var origins = [CGPoint](repeating: .zero, count: lines.count)
+        CTFrameGetLineOrigins(frame, CFRange(location: 0, length: 0), &origins)
+
+        let paddingX = 18 * scale
+        let paddingY = 8 * scale
+
+        /// Translucent pills on adjacent lines overlap, and overlapping
+        /// translucency doubles into a seam band. Drawing every pill
+        /// OPAQUE inside one transparency layer, then compositing the
+        /// layer at the pill's alpha, keeps the block one even tone and
+        /// merges touching pills into a single clean shape.
+        let pillColor = color.cgColor
+        let pillAlpha = pillColor.alpha
+        context.saveGState()
+        if pillAlpha < 1 {
+            context.setAlpha(pillAlpha)
+            context.beginTransparencyLayer(auxiliaryInfo: nil)
+            context.setFillColor(pillColor.copy(alpha: 1) ?? pillColor)
+        } else {
+            context.setFillColor(pillColor)
+        }
+
+        for (line, origin) in zip(lines, origins) {
+            var ascent: CGFloat = 0
+            var descent: CGFloat = 0
+            var leading: CGFloat = 0
+            let width = CGFloat(CTLineGetTypographicBounds(line, &ascent, &descent, &leading))
+            guard width > 1 else { continue }
+
+            /// Line origins are relative to the frame's path origin.
+            let rect = CGRect(
+                x: frameRect.minX + origin.x - paddingX,
+                y: frameRect.minY + origin.y - descent - paddingY,
+                width: width + paddingX * 2,
+                height: ascent + descent + paddingY * 2
+            )
+            let path = CGPath(
+                roundedRect: rect,
+                cornerWidth: min(12 * scale, rect.height / 2),
+                cornerHeight: min(12 * scale, rect.height / 2),
+                transform: nil
+            )
+            context.addPath(path)
+            context.fillPath()
+        }
+
+        if pillAlpha < 1 {
+            context.endTransparencyLayer()
+        }
+        context.restoreGState()
+    }
+
+    /// The size a text block wants, for callers that size decoration around
+    /// text (chips).
+    static func measure(
+        text: String,
+        style: TextStyle,
+        brand: BrandKit,
+        maxWidth: CGFloat,
+        scale: CGFloat
+    ) -> CGSize {
+        let attributed = attributedString(
+            text: text, style: style, brand: brand,
+            pointSize: style.size * Double(scale)
+        )
+        let framesetter = CTFramesetterCreateWithAttributedString(attributed)
+        return CTFramesetterSuggestFrameSizeWithConstraints(
+            framesetter,
+            CFRange(location: 0, length: 0),
+            nil,
+            CGSize(width: maxWidth, height: .greatestFiniteMagnitude),
+            nil
+        )
+    }
+
+    // MARK: - Attributed string assembly
+
+    /// The unconstrained single-line width — what a word needs to not wrap.
+    private static func measuredWidth(_ attributed: CFAttributedString) -> CGFloat {
+        let framesetter = CTFramesetterCreateWithAttributedString(attributed)
+        return CTFramesetterSuggestFrameSizeWithConstraints(
+            framesetter,
+            CFRange(location: 0, length: 0),
+            nil,
+            CGSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude),
+            nil
+        ).width
+    }
+
+    private static func measuredHeight(_ attributed: CFAttributedString, width: CGFloat) -> CGFloat {
+        let framesetter = CTFramesetterCreateWithAttributedString(attributed)
+        return CTFramesetterSuggestFrameSizeWithConstraints(
+            framesetter,
+            CFRange(location: 0, length: 0),
+            nil,
+            CGSize(width: width, height: .greatestFiniteMagnitude),
+            nil
+        ).height
+    }
+
+    /// Build the attributed string: base run plus `**accent**` spans in the
+    /// accent color. Markup is stripped from the drawn text.
+    /// - Parameter strokeOverride: Replaces the style's stroke width for
+    ///   this pass. `outlined` text is drawn twice — a keyline pass and a
+    ///   fill pass — and each needs a different width from the same style.
+    private static func attributedString(
+        text: String,
+        style: TextStyle,
+        brand: BrandKit,
+        pointSize: Double,
+        strokeOverride: Double? = nil
+    ) -> CFAttributedString {
+        let content = style.uppercased ? text.uppercased() : text
+        let segments = parseAccents(in: content)
+
+        let font = FontResolver.font(
+            family: style.fontFamily ?? brand.fontFamily,
+            weight: style.weight,
+            size: pointSize
+        )
+        /// The italic face, made once — CoreText falls back to the upright
+        /// font when the family has no oblique.
+        let italicFont = CTFontCreateCopyWithSymbolicTraits(font, 0, nil, .traitItalic, .traitItalic) ?? font
+
+        /// The accent face, when emphasis means heavier rather than another
+        /// colour — the magazine idiom, where a phrase inside a paragraph is
+        /// picked out in the same ink and a heavier weight.
+        let accentFont = style.accentWeight.map {
+            FontResolver.font(
+                family: style.fontFamily ?? brand.fontFamily,
+                weight: $0,
+                size: pointSize
+            )
+        }
+        let accentItalicFont = accentFont.map {
+            CTFontCreateCopyWithSymbolicTraits($0, 0, nil, .traitItalic, .traitItalic) ?? $0
+        }
+
+        let baseColor = (style.color ?? brand.textColor).cgColor
+
+        /// A weight was asked for and a colour was not: emphasis is the
+        /// weight, and the run keeps the body's ink. Asking to embolden is
+        /// not asking to recolour as well.
+        let accentColor = style.accentColor?.cgColor
+            ?? (style.accentWeight == nil ? brand.accentColor.cgColor : baseColor)
+
+        let alignment: CTTextAlignment
+        switch style.alignment {
+        case "center": alignment = .center
+        case "right": alignment = .right
+        default: alignment = .left
+        }
+
+        /// The settings take raw pointers that must outlive `CTParagraphStyleCreate`,
+        /// so the values live in explicitly managed allocations for the call's duration.
+        let alignmentPointer = UnsafeMutablePointer<CTTextAlignment>.allocate(capacity: 1)
+        alignmentPointer.initialize(to: alignment)
+        defer { alignmentPointer.deinitialize(count: 1); alignmentPointer.deallocate() }
+
+        let lineHeightPointer = UnsafeMutablePointer<CGFloat>.allocate(capacity: 1)
+        lineHeightPointer.initialize(to: CGFloat(style.lineHeight))
+        defer { lineHeightPointer.deinitialize(count: 1); lineHeightPointer.deallocate() }
+
+        let settings: [CTParagraphStyleSetting] = [
+            CTParagraphStyleSetting(
+                spec: .alignment,
+                valueSize: MemoryLayout<CTTextAlignment>.size,
+                value: alignmentPointer
+            ),
+            CTParagraphStyleSetting(
+                spec: .lineHeightMultiple,
+                valueSize: MemoryLayout<CGFloat>.size,
+                value: lineHeightPointer
+            )
+        ]
+        let paragraph = CTParagraphStyleCreate(settings, settings.count)
+
+        let result = CFAttributedStringCreateMutable(kCFAllocatorDefault, 0)!
+        CFAttributedStringBeginEditing(result)
+
+        for segment in segments {
+            let range = CFRange(
+                location: CFAttributedStringGetLength(result),
+                length: segment.text.utf16.count
+            )
+            CFAttributedStringReplaceString(
+                result,
+                CFRange(location: CFAttributedStringGetLength(result), length: 0),
+                segment.text as CFString
+            )
+            let face: CTFont
+            if segment.accented, let accentFont, let accentItalicFont {
+                face = segment.italic ? accentItalicFont : accentFont
+            } else {
+                face = segment.italic ? italicFont : font
+            }
+            CFAttributedStringSetAttribute(result, range, kCTFontAttributeName, face)
+            CFAttributedStringSetAttribute(
+                result, range, kCTForegroundColorAttributeName,
+                segment.accented ? accentColor : baseColor
+            )
+            CFAttributedStringSetAttribute(result, range, kCTParagraphStyleAttributeName, paragraph)
+            let strokeWidth = strokeOverride ?? style.strokeWidth
+            if strokeWidth > 0 {
+                /// CoreText reads the sign as the mode: positive strokes and
+                /// does not fill (hollow), negative does both (a keyline
+                /// around filled text). The sign is not something a caller
+                /// should have to know, so the style names the treatment and
+                /// this converts.
+                CFAttributedStringSetAttribute(
+                    result, range, kCTStrokeWidthAttributeName,
+                    strokeWidth as CFNumber
+                )
+                CFAttributedStringSetAttribute(
+                    result, range, kCTStrokeColorAttributeName,
+                    segment.accented
+                        ? accentColor
+                        : (style.strokeColor ?? style.color ?? brand.textColor).cgColor
+                )
+            }
+            if segment.accented, style.underlineAccents {
+                CFAttributedStringSetAttribute(
+                    result, range, kCTUnderlineStyleAttributeName,
+                    CTUnderlineStyle.single.rawValue as CFNumber
+                )
+            } else {
+                /// Inserted text inherits the preceding run's attributes, so a
+                /// plain segment after an underlined accent arrives already
+                /// underlined — clear it explicitly.
+                CFAttributedStringRemoveAttribute(result, range, kCTUnderlineStyleAttributeName)
+            }
+            if style.kerning != 0 {
+                /// Scaled to the auto-shrunk size — but a declared size of
+                /// zero would make the ratio NaN, and NaN in a CoreText
+                /// attribute is undefined behaviour with a canvas.
+                let scaled = style.size > 0
+                    ? style.kerning * Double(pointSize) / style.size
+                    : style.kerning
+                CFAttributedStringSetAttribute(
+                    result, range, kCTKernAttributeName,
+                    scaled as CFNumber
+                )
+            }
+        }
+
+        CFAttributedStringEndEditing(result)
+        return result
+    }
+
+    struct Run: Equatable {
+        var text: String
+        var accented = false
+        var italic = false
+    }
+
+    /// Split `"**Amazing** *catchy* title #Hooked"` into runs: `**accent**`
+    /// spans color from the brand, `*italic*` spans slant, and `#hashtags`
+    /// take the accent color the way every platform renders them.
+    static func parseAccents(in text: String) -> [Run] {
+        var segments: [Run] = []
+
+        func appendPlain(_ plain: Substring) {
+            /// Within a plain stretch: *italic* spans, then hashtags.
+            var remaining = plain
+            while let open = remaining.range(of: "*") {
+                let afterOpen = remaining[open.upperBound...]
+                guard let close = afterOpen.range(of: "*"), afterOpen[..<close.lowerBound].count > 0 else { break }
+                appendHashtagged(remaining[..<open.lowerBound], italic: false)
+                segments.append(Run(text: String(afterOpen[..<close.lowerBound]), italic: true))
+                remaining = afterOpen[close.upperBound...]
+            }
+            appendHashtagged(remaining, italic: false)
+        }
+
+        func appendHashtagged(_ plain: Substring, italic: Bool) {
+            var remaining = plain
+            while let hash = remaining.firstIndex(of: "#") {
+                let tag = remaining[remaining.index(after: hash)...].prefix { $0.isLetter || $0.isNumber || $0 == "_" }
+                guard !tag.isEmpty else {
+                    if !remaining[..<remaining.index(after: hash)].isEmpty {
+                        segments.append(Run(text: String(remaining[..<remaining.index(after: hash)]), italic: italic))
+                    }
+                    remaining = remaining[remaining.index(after: hash)...]
+                    continue
+                }
+                if hash > remaining.startIndex {
+                    segments.append(Run(text: String(remaining[..<hash]), italic: italic))
+                }
+                segments.append(Run(text: "#" + tag, accented: true, italic: italic))
+                remaining = remaining[tag.endIndex...]
+            }
+            if !remaining.isEmpty {
+                segments.append(Run(text: String(remaining), italic: italic))
+            }
+        }
+
+        var remaining = Substring(text)
+        while let open = remaining.range(of: "**") {
+            let afterOpen = remaining[open.upperBound...]
+            guard let close = afterOpen.range(of: "**") else { break }
+
+            if remaining.startIndex < open.lowerBound {
+                appendPlain(remaining[..<open.lowerBound])
+            }
+            segments.append(Run(text: String(afterOpen[..<close.lowerBound]), accented: true))
+            remaining = afterOpen[close.upperBound...]
+        }
+        if !remaining.isEmpty {
+            appendPlain(remaining)
+        }
+        return segments.isEmpty ? [Run(text: text)] : segments
+    }
+}
