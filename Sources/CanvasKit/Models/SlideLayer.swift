@@ -33,14 +33,7 @@ public struct UnitRect: Codable, Equatable, Sendable {
     /// Resolved to pixels, converted to CoreGraphics coordinates
     /// (origin bottom-left).
     func pixels(in canvas: Canvas) -> CGRect {
-        let w = CGFloat(canvas.width)
-        let h = CGFloat(canvas.height)
-        return CGRect(
-            x: w * x,
-            y: h * (1 - y - height),
-            width: w * width,
-            height: h * height
-        )
+        UnitGeometry.pixels(self, in: canvas)
     }
 }
 

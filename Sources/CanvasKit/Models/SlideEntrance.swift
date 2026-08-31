@@ -53,16 +53,11 @@ public struct SlideEntrance: Codable, Equatable, Sendable {
 
     /// When the last of `layerCount` layers has fully landed.
     public func settleTime(layerCount: Int) -> Double {
-        guard layerCount > 0 else { return 0 }
-        return Double(layerCount - 1) * stagger + duration
+        EntranceTiming.settleTime(layerCount: layerCount, duration: duration, stagger: stagger)
     }
 
     /// Eased progress (0…1) for the layer at `index` at `time`.
     func progress(layerIndex: Int, at time: Double) -> Double {
-        guard time.isFinite else { return 1 }
-        let raw = (time - Double(layerIndex) * stagger) / max(duration, 0.01)
-        let clamped = min(max(raw, 0), 1)
-        /// Ease-out cubic: fast arrival, gentle landing.
-        return 1 - pow(1 - clamped, 3)
+        EntranceTiming.progress(layerIndex: layerIndex, at: time, duration: duration, stagger: stagger)
     }
 }
