@@ -108,3 +108,37 @@ final class GradientCatalogTests: XCTestCase {
         }
     }
 }
+
+final class TemplateDataDecodingTests: XCTestCase {
+
+    private func decode(_ json: String) throws -> TemplateData {
+        try JSONDecoder().decode(TemplateData.self, from: Data(json.utf8))
+    }
+
+    func testItemsAloneIsEnough() throws {
+        // The commonest shape by far: most templates take a list and no
+        // deck-wide tokens. The synthesised decoder required both keys and
+        // rejected this with a message describing what the author had written.
+        let data = try decode(#"{"items":[{"headline":"One"},{"headline":"Two"}]}"#)
+        XCTAssertEqual(data.items.count, 2)
+        XCTAssertTrue(data.values.isEmpty)
+    }
+
+    func testValuesAloneIsEnough() throws {
+        let data = try decode(#"{"values":{"topic":"Focus"}}"#)
+        XCTAssertEqual(data.values["topic"], "Focus")
+        XCTAssertTrue(data.items.isEmpty)
+    }
+
+    func testBothStillWork() throws {
+        let data = try decode(#"{"values":{"topic":"Focus"},"items":[{"headline":"One"}]}"#)
+        XCTAssertEqual(data.values["topic"], "Focus")
+        XCTAssertEqual(data.items.count, 1)
+    }
+
+    func testAnEmptyObjectIsEmptyRatherThanAnError() throws {
+        let data = try decode("{}")
+        XCTAssertTrue(data.values.isEmpty)
+        XCTAssertTrue(data.items.isEmpty)
+    }
+}

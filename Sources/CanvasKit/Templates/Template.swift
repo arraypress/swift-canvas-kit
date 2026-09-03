@@ -273,6 +273,19 @@ public struct TemplateData: Codable, Equatable, Sendable {
         self.values = values
         self.items = items
     }
+
+    /// Both keys are optional on the way in.
+    ///
+    /// The synthesised decoder requires both, so a content file carrying only
+    /// `items` — the commonest shape by far, since most templates take a list
+    /// and no deck-wide tokens — was rejected with a message telling the
+    /// author to write exactly what they had written. Tolerant decoding is
+    /// this package's rule everywhere else; this type had missed it.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        values = try container.decodeIfPresent([String: String].self, forKey: .values) ?? [:]
+        items = try container.decodeIfPresent([[String: String]].self, forKey: .items) ?? []
+    }
 }
 
 extension SlideLayer {
