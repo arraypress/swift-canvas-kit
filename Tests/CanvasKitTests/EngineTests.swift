@@ -273,12 +273,21 @@ import Testing
     /// The catalog is a resource, not code — it must actually decode from
     /// the bundle, keep file order, and resolve by name.
     #expect(!Background.curatedGradients.isEmpty)
-    #expect(Background.curatedGradients.first?.name == "sunset-glow")
-    guard case .linearGradient(let colors, let angle) = Background.gradient(named: "aurora-night") else {
+
+    /// File order is the contract, so the FIRST entry is checked — but by the
+    /// fact that one exists and resolves, not by its name. Pinning
+    /// "sunset-glow" here meant retiring a gradient broke a test about
+    /// whether JSON decodes, which is a test failing for a reason it is not
+    /// about.
+    let first = Background.curatedGradients.first
+    #expect(first != nil)
+    #expect(first.map { Background.gradient(named: $0.name) == $0.background } == true)
+
+    guard case .linearGradient(let colors, let angle) = Background.gradient(named: "ocean-depth") else {
         Issue.record("Expected a gradient"); return
     }
-    #expect(colors.count == 4)
-    #expect(angle == 200)
+    #expect(colors.count == 2)
+    #expect(angle == 170)
 
     /// Unknown names are visible magenta, never a crash.
     #expect(Background.gradient(named: "does-not-exist") == .solid(SlideColor("#FF00FF")))

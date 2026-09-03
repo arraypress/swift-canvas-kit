@@ -1,14 +1,16 @@
 [
-  { "name": "sunset-glow", "colors": ["#1F1147", "#A83279", "#FF7E5F"], "angle": 160 },
-  { "name": "aurora-night", "colors": ["#020C1B", "#04294F", "#0F766E", "#34D399"], "angle": 200 },
-  { "name": "ember-dusk", "colors": ["#1A0F0B", "#57150B", "#A6350F", "#F97316"], "angle": 165 },
-  { "name": "violet-hour", "colors": ["#0F0524", "#4C1D95", "#A855F7"], "angle": 155 },
-  { "name": "ocean-depth", "colors": ["#020617", "#0C4A6E", "#0891B2"], "angle": 170 },
-  { "name": "solar-flare", "colors": ["#B45309", "#EA580C", "#FACC15"], "angle": 150 },
-  { "name": "candy-wash", "colors": ["#F472B6", "#C4B5FD", "#7DD3FC"], "angle": 200 },
-  { "name": "honey-milk", "colors": ["#FFFBEB", "#FEF3C7", "#FDE68A"], "angle": 170 },
-  { "name": "morning-sky", "colors": ["#E3F2FF", "#CFE8FF"], "angle": 165 },
-  { "name": "blush-wash", "colors": ["#F3EEF8", "#FBEFF0", "#FDF6F1"], "angle": 165 },
-  { "name": "lilac-wash", "colors": ["#EEF0FB", "#F6EFF8", "#FDF3F4"], "angle": 170 },
-  { "name": "mist-wash", "colors": ["#F2F4F7", "#EDF1F6", "#F7F8FA"], "angle": 160 }
+  { "name": "midnight", "colors": ["#070B18", "#18243F"], "angle": 165 },
+  { "name": "ink", "colors": ["#0B0A12", "#221E33"], "angle": 170 },
+  { "name": "graphite", "colors": ["#0C0D10", "#23262E"], "angle": 160 },
+  { "name": "ocean-depth", "colors": ["#020A17", "#0B3A52"], "angle": 170 },
+  { "name": "violet-hour", "colors": ["#0F0722", "#37205E"], "angle": 155 },
+  { "name": "ember-dusk", "colors": ["#150B08", "#48200F"], "angle": 165 },
+  { "name": "forest", "colors": ["#06120E", "#143728"], "angle": 168 },
+  { "name": "cobalt", "colors": ["#1E3A8A", "#2B4FC4"], "angle": 165 },
+  { "name": "sea", "colors": ["#0F5C63", "#12807F"], "angle": 168 },
+  { "name": "honey-milk", "colors": ["#FFFBEB", "#FDF1D2"], "angle": 170 },
+  { "name": "morning-sky", "colors": ["#E9F3FF", "#D6E9FF"], "angle": 165 },
+  { "name": "blush-wash", "colors": ["#F3EEF8", "#FDF6F1"], "angle": 165 },
+  { "name": "lilac-wash", "colors": ["#EEF0FB", "#FBF3F6"], "angle": 170 },
+  { "name": "mist-wash", "colors": ["#F2F4F7", "#F7F8FA"], "angle": 160 }
 ]

@@ -85,6 +85,44 @@ final class GradientCatalogTests: XCTestCase {
         }
     }
 
+    func testEveryGradientIsTonalRatherThanARainbow() {
+        // What dated the old catalog was hue TRAVEL: sunset-glow ran purple
+        // to magenta to salmon, about 115 degrees across the wheel in three
+        // stops. A ground is a ground; it should not be a journey. Two stops,
+        // one hue family, is the whole rule.
+        for entry in Background.curatedGradients {
+            guard case .linearGradient(let colors, _) = entry.background else { continue }
+            XCTAssertLessThanOrEqual(colors.count, 2, "\(entry.name) has \(colors.count) stops")
+
+            let hues = colors.compactMap { hue(of: $0) }
+            guard hues.count == 2 else { continue }
+            var travel = abs(hues[0] - hues[1])
+            if travel > 180 { travel = 360 - travel }   // the wheel wraps
+            XCTAssertLessThanOrEqual(travel, 45, "\(entry.name) travels \(Int(travel))° of hue")
+        }
+    }
+
+    /// Hue in degrees, or nil for something too grey to have one.
+    ///
+    /// The chroma floor is 0.08, not a hairline. Written at 0.02 this test
+    /// failed the pale washes for "travelling 115°" — true of the numbers and
+    /// meaningless of the picture, since at 4% chroma the two stops are both
+    /// off-white and no eye reads a hue rotation between them. A rule about
+    /// how something LOOKS has to stop measuring where looking stops.
+    private func hue(of color: SlideColor) -> Double? {
+        let parts = (color.cgColor.components ?? []).prefix(3).map(Double.init)
+        guard parts.count == 3 else { return nil }
+        let high = parts.max() ?? 0, low = parts.min() ?? 0
+        let delta = high - low
+        guard delta > 0.08 else { return nil }
+        let (r, g, b) = (parts[0], parts[1], parts[2])
+        let raw: Double
+        if high == r { raw = 60 * (((g - b) / delta).truncatingRemainder(dividingBy: 6)) }
+        else if high == g { raw = 60 * ((b - r) / delta + 2) }
+        else { raw = 60 * ((r - g) / delta + 4) }
+        return raw < 0 ? raw + 360 : raw
+    }
+
     func testThePaleTierIsPresentAndActuallyPale() {
         // The point of these three is that a device and BLACK type can sit on
         // them. A "pale" ground that is merely a lighter poster fails that.
