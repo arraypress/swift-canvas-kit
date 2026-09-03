@@ -323,6 +323,11 @@ enum TextDrawer {
         let accentColor = style.accentColor?.cgColor
             ?? (style.accentWeight == nil ? brand.accentColor.cgColor : baseColor)
 
+        /// No fallback to a computed grey: a tier the style has not defined
+        /// leaves `~spans~` at the body colour, so the marker is inert rather
+        /// than silently introducing a colour nobody chose.
+        let mutedColor = style.mutedColor?.cgColor
+
         let alignment: CTTextAlignment
         switch style.alignment {
         case "center": alignment = .center
@@ -374,10 +379,15 @@ enum TextDrawer {
                 face = segment.italic ? italicFont : font
             }
             CFAttributedStringSetAttribute(result, range, kCTFontAttributeName, face)
-            CFAttributedStringSetAttribute(
-                result, range, kCTForegroundColorAttributeName,
-                segment.accented ? accentColor : baseColor
-            )
+            /// Accent wins over muted where both are asked for: a span marked
+            /// as the loud tier and the quiet one at once is a caller
+            /// contradicting themselves, and the emphasis is the thing they
+            /// were more deliberate about.
+            let ink: CGColor
+            if segment.accented { ink = accentColor }
+            else if segment.muted { ink = mutedColor ?? baseColor }
+            else { ink = baseColor }
+            CFAttributedStringSetAttribute(result, range, kCTForegroundColorAttributeName, ink)
             CFAttributedStringSetAttribute(result, range, kCTParagraphStyleAttributeName, paragraph)
             let strokeWidth = strokeOverride ?? style.strokeWidth
             if strokeWidth > 0 {
@@ -430,46 +440,72 @@ enum TextDrawer {
         var text: String
         var accented = false
         var italic = false
+        /// A tier BELOW the body — quieter, not another accent.
+        var muted = false
     }
 
-    /// Split `"**Amazing** *catchy* title #Hooked"` into runs: `**accent**`
-    /// spans color from the brand, `*italic*` spans slant, and `#hashtags`
-    /// take the accent color the way every platform renders them.
+    /// Split `"~Native~ and **Fast**"` into runs: `**accent**` spans colour
+    /// from the brand, `~muted~` spans take a tier BELOW the body, `*italic*`
+    /// spans slant, and `#hashtags` take the accent colour the way every
+    /// platform renders them.
+    ///
+    /// Three tiers rather than two because that is what the headlines this is
+    /// asked to set actually use: "Native and Fast" is grey, black, purple —
+    /// a quieter word, the body, and the accent. With only base and accent the
+    /// quiet word has to borrow the accent, and the emphasis collapses into
+    /// two words fighting.
+    ///
+    /// `~` is a single tilde on purpose: `*` and `**` are taken, and markdown
+    /// spells strikethrough with two, so one is free.
     static func parseAccents(in text: String) -> [Run] {
         var segments: [Run] = []
 
         func appendPlain(_ plain: Substring) {
-            /// Within a plain stretch: *italic* spans, then hashtags.
+            /// Within a plain stretch: ~muted~ spans, then *italic*, then
+            /// hashtags. Muted is taken first so `~a *b* c~` keeps the whole
+            /// span quiet rather than the italic escaping the tier.
+            var remaining = plain
+            while let open = remaining.range(of: "~") {
+                let afterOpen = remaining[open.upperBound...]
+                guard let close = afterOpen.range(of: "~"), !afterOpen[..<close.lowerBound].isEmpty else { break }
+                appendItalicised(remaining[..<open.lowerBound], muted: false)
+                appendItalicised(afterOpen[..<close.lowerBound], muted: true)
+                remaining = afterOpen[close.upperBound...]
+            }
+            appendItalicised(remaining, muted: false)
+        }
+
+        func appendItalicised(_ plain: Substring, muted: Bool) {
             var remaining = plain
             while let open = remaining.range(of: "*") {
                 let afterOpen = remaining[open.upperBound...]
                 guard let close = afterOpen.range(of: "*"), afterOpen[..<close.lowerBound].count > 0 else { break }
-                appendHashtagged(remaining[..<open.lowerBound], italic: false)
-                segments.append(Run(text: String(afterOpen[..<close.lowerBound]), italic: true))
+                appendHashtagged(remaining[..<open.lowerBound], italic: false, muted: muted)
+                segments.append(Run(text: String(afterOpen[..<close.lowerBound]), italic: true, muted: muted))
                 remaining = afterOpen[close.upperBound...]
             }
-            appendHashtagged(remaining, italic: false)
+            appendHashtagged(remaining, italic: false, muted: muted)
         }
 
-        func appendHashtagged(_ plain: Substring, italic: Bool) {
+        func appendHashtagged(_ plain: Substring, italic: Bool, muted: Bool = false) {
             var remaining = plain
             while let hash = remaining.firstIndex(of: "#") {
                 let tag = remaining[remaining.index(after: hash)...].prefix { $0.isLetter || $0.isNumber || $0 == "_" }
                 guard !tag.isEmpty else {
                     if !remaining[..<remaining.index(after: hash)].isEmpty {
-                        segments.append(Run(text: String(remaining[..<remaining.index(after: hash)]), italic: italic))
+                        segments.append(Run(text: String(remaining[..<remaining.index(after: hash)]), italic: italic, muted: muted))
                     }
                     remaining = remaining[remaining.index(after: hash)...]
                     continue
                 }
                 if hash > remaining.startIndex {
-                    segments.append(Run(text: String(remaining[..<hash]), italic: italic))
+                    segments.append(Run(text: String(remaining[..<hash]), italic: italic, muted: muted))
                 }
-                segments.append(Run(text: "#" + tag, accented: true, italic: italic))
+                segments.append(Run(text: "#" + tag, accented: true, italic: italic, muted: muted))
                 remaining = remaining[tag.endIndex...]
             }
             if !remaining.isEmpty {
-                segments.append(Run(text: String(remaining), italic: italic))
+                segments.append(Run(text: String(remaining), italic: italic, muted: muted))
             }
         }
 

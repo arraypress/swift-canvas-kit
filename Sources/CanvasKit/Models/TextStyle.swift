@@ -49,6 +49,18 @@ public struct TextStyle: Codable, Equatable, Sendable {
 
     public var accentColor: SlideColor?
 
+    /// The colour `~muted~` spans take — a tier BELOW the body, not another
+    /// accent.
+    ///
+    /// Two tiers were not enough for the headlines this is actually asked to
+    /// set. "Native and Fast" reads grey / black / purple: a quieter word, the
+    /// body, and the accent. With only base and accent, the quiet word has to
+    /// borrow the accent and the emphasis collapses.
+    ///
+    /// `nil` leaves `~spans~` at the body colour, so the marker is inert
+    /// rather than wrong where a style has not defined the tier.
+    public var mutedColor: SlideColor?
+
     /// `left`, `center`, or `right`.
     public var alignment: String
 
@@ -121,6 +133,7 @@ public struct TextStyle: Codable, Equatable, Sendable {
         size: Double = 48,
         color: SlideColor? = nil,
         accentColor: SlideColor? = nil,
+        mutedColor: SlideColor? = nil,
         accentWeight: String? = nil,
         alignment: String = "left",
         lineHeight: Double = 1.0,
@@ -143,6 +156,7 @@ public struct TextStyle: Codable, Equatable, Sendable {
         self.size = size
         self.color = color
         self.accentColor = accentColor
+        self.mutedColor = mutedColor
         self.accentWeight = accentWeight
         self.alignment = alignment
         self.lineHeight = lineHeight
@@ -171,6 +185,7 @@ public struct TextStyle: Codable, Equatable, Sendable {
         size = try container.decodeIfPresent(Double.self, forKey: .size) ?? 48
         color = try container.decodeIfPresent(SlideColor.self, forKey: .color)
         accentColor = try container.decodeIfPresent(SlideColor.self, forKey: .accentColor)
+        mutedColor = try container.decodeIfPresent(SlideColor.self, forKey: .mutedColor)
         accentWeight = try container.decodeIfPresent(String.self, forKey: .accentWeight)
         alignment = try container.decodeIfPresent(String.self, forKey: .alignment) ?? "left"
         lineHeight = try container.decodeIfPresent(Double.self, forKey: .lineHeight) ?? 1.0

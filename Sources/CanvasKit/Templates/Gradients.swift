@@ -9,6 +9,16 @@ import Foundation
 
 /// Curated gradients — the palette philosophy applied to backgrounds.
 ///
+/// Two kinds of entry, and the difference matters when picking one.
+///
+/// The first nine are **colours** — saturated enough to be the subject, with
+/// white type over them. The three `-wash` entries are **grounds**: near-white
+/// washes that let a device and black type sit on them, which is the look the
+/// App Store pages that actually convert are using. `candy-wash` carries
+/// exactly those hues at four times the saturation and reads as a poster
+/// rather than a page, so the pale tier had to be its own entries rather than
+/// a lightened version of what was there.
+///
 /// The catalog lives in `Resources/gradients.json`, not code: every entry
 /// is hand-tuned (stops chosen together, angles considered, contrast held
 /// for the library's text colors), and adding one is editing JSON, not
