@@ -52,3 +52,59 @@ final class MutedTierTests: XCTestCase {
         XCTAssertEqual(TextDrawer.parseAccents(in: "Your money").map(\.text), ["Your money"])
     }
 }
+
+final class FontAvailabilityTests: XCTestCase {
+
+    func testAKnownFamilyIsFound() {
+        XCTAssertTrue(FontResolver.isAvailable("Helvetica"))
+    }
+
+    func testAnUnknownFamilyIsRefused() {
+        // The reason this exists: CoreText SUBSTITUTES a default face rather
+        // than failing, so a typo would render a whole set in the wrong
+        // typeface and look deliberate.
+        XCTAssertFalse(FontResolver.isAvailable("Notafont Sans Fictional"))
+    }
+}
+
+final class GradientCatalogTests: XCTestCase {
+
+    func testTheCatalogParses() {
+        // This is the test that matters: the catalog is JSON in Resources, and
+        // a malformed file makes EVERY curated gradient silently become
+        // magenta rather than failing loudly. A `//` comment nearly shipped in
+        // there, which would have taken the whole list with it.
+        XCTAssertGreaterThanOrEqual(Background.curatedGradients.count, 12)
+    }
+
+    func testEveryNameResolvesToAGradient() {
+        for entry in Background.curatedGradients {
+            guard case .linearGradient = Background.gradient(named: entry.name) else {
+                return XCTFail("\(entry.name) fell back to the magenta placeholder")
+            }
+        }
+    }
+
+    func testThePaleTierIsPresentAndActuallyPale() {
+        // The point of these three is that a device and BLACK type can sit on
+        // them. A "pale" ground that is merely a lighter poster fails that.
+        for name in ["blush-wash", "lilac-wash", "mist-wash"] {
+            guard case .linearGradient(let colors, _) = Background.gradient(named: name) else {
+                return XCTFail("\(name) is missing")
+            }
+            for color in colors {
+                let parts = (color.cgColor.components ?? []).prefix(3)
+                XCTAssertGreaterThan(parts.min() ?? 0, 0.88,
+                                     "\(name) has a stop dark enough to fight black type")
+            }
+        }
+    }
+
+    func testAnUnknownNameIsVisiblyWrongNotSilentlyWrong() {
+        // Magenta on purpose: a gradient you can see is wrong beats one that
+        // quietly becomes something else.
+        guard case .solid = Background.gradient(named: "no-such-gradient") else {
+            return XCTFail("an unknown name should fall back to the placeholder")
+        }
+    }
+}

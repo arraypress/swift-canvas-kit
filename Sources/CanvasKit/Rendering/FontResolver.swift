@@ -15,7 +15,25 @@ import Foundation
 /// unit test or a CLI. A named family resolves through a font descriptor with
 /// weight traits; no family means the system face, which is the right default
 /// for this genre anyway.
-enum FontResolver {
+public enum FontResolver {
+
+    /// Whether a family is installed on this machine.
+    ///
+    /// Public because the alternative is worse than a missing feature:
+    /// CoreText SUBSTITUTES a default face for an unknown family rather than
+    /// failing, so a typo in `--font` renders an entire marketing set in the
+    /// wrong typeface and looks deliberate. A caller taking a family name from
+    /// a human needs to be able to refuse it.
+    public static func isAvailable(_ family: String) -> Bool {
+        let descriptor = CTFontDescriptorCreateWithAttributes(
+            [kCTFontFamilyNameAttribute: family as CFString] as CFDictionary
+        )
+        let keys = Set([kCTFontFamilyNameAttribute as String]) as NSSet
+        let matches = CTFontDescriptorCreateMatchingFontDescriptors(descriptor, keys)
+            as? [CTFontDescriptor]
+        return !(matches ?? []).isEmpty
+    }
+
 
     /// Weight names templates use, mapped to descriptor trait values.
     private static let weights: [String: CGFloat] = [
