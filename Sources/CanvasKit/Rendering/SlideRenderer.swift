@@ -558,11 +558,13 @@ public enum SlideRenderer {
         guard radius > 0 else { return image }
 
         let input = CIImage(cgImage: image)
-        guard let clamp = CIFilter(name: "CIAffineClamp") else { return image }
-        clamp.setValue(input, forKey: kCIInputImageKey)
+        /// `clampedToExtent()`, not a `CIAffineClamp` filter set up by hand:
+        /// on macOS 27 the filter's default transform is not the identity,
+        /// and the plate came back as its bottom-left corner stretched over
+        /// the frame (its default transform there is a 0.4 scale).
+        let clamped = input.clampedToExtent()
 
-        guard let blur = CIFilter(name: "CIGaussianBlur"),
-              let clamped = clamp.outputImage else { return image }
+        guard let blur = CIFilter(name: "CIGaussianBlur") else { return image }
         blur.setValue(clamped, forKey: kCIInputImageKey)
         blur.setValue(radius, forKey: kCIInputRadiusKey)
 

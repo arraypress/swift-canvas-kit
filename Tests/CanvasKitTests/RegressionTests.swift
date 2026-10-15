@@ -377,3 +377,27 @@ private func sample(_ image: CGImage, x: Int, y: Int) -> (red: Double, green: Do
     let legacy = try JSONDecoder().decode(SlideDeck.self, from: Data(#"{"slides":[]}"#.utf8))
     #expect(!legacy.showsPageIndicator)
 }
+
+// MARK: - Blur keeps the whole picture (0.5.1)
+
+/// A picture whose left half is black and right half white, blurred a
+/// little, must still be dark on the left and light on the right. The
+/// hand-built CIAffineClamp's default transform is a 0.4 scale on macOS 27,
+/// so the picture came back shrunk into its bottom-left corner and smeared
+/// over the rest: 60 px in, the black half read white.
+@Test func aBlurredPlateKeepsItsHalves() throws {
+    let space = CGColorSpace(name: CGColorSpace.sRGB)!
+    let context = try #require(CGContext(data: nil, width: 200, height: 100, bitsPerComponent: 8, bytesPerRow: 0,
+                                         space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+    context.setFillColor(CGColor(gray: 0, alpha: 1)); context.fill(CGRect(x: 0, y: 0, width: 100, height: 100))
+    context.setFillColor(CGColor(gray: 1, alpha: 1)); context.fill(CGRect(x: 100, y: 0, width: 100, height: 100))
+    let blurred = SlideRenderer.blurred(try #require(context.makeImage()), radius: 3)
+    #expect(blurred.width == 200)
+    let probe = try #require(CGContext(data: nil, width: 200, height: 100, bitsPerComponent: 8, bytesPerRow: 800,
+                                       space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+    probe.draw(blurred, in: CGRect(x: 0, y: 0, width: 200, height: 100))
+    let bytes = try #require(probe.data).bindMemory(to: UInt8.self, capacity: 200 * 100 * 4)
+    #expect(bytes[(50 * 200 + 20) * 4] < 20, "the left stays dark")
+    #expect(bytes[(50 * 200 + 60) * 4] < 20, "all the way to the middle")
+    #expect(bytes[(50 * 200 + 180) * 4] > 235, "the right stays light")
+}
