@@ -14,20 +14,50 @@ import Foundation
 /// Handles the three things templates rely on: `**accent**` span markup,
 /// auto-shrink so variable-length content stays inside its region, and
 /// vertical alignment within the region. Pure CoreText — no AppKit/UIKit.
-enum TextDrawer {
+public enum TextDrawer {
 
-    /// Draw `text` inside `region` (a CoreGraphics rect, origin bottom-left).
-    static func draw(
+    /// Draw `text` inside `region` (a CoreGraphics rect, origin bottom-left)
+    /// at `scale` pixels per style point, with no brand: a style's unset
+    /// colours fall back to ``BrandKit``'s defaults. Returns where the text
+    /// went and whether it fitted.
+    @discardableResult
+    public static func draw(
+        text: String,
+        style: TextStyle,
+        in region: CGRect,
+        verticalAlignment: String,
+        context: CGContext,
+        scale: CGFloat
+    ) -> TextFit? {
+        draw(text: text, style: style, brand: BrandKit(), in: region,
+             verticalAlignment: verticalAlignment, context: context, scale: scale)
+    }
+
+    /// Where `text` would go inside `region` and at what size, without
+    /// drawing it — for a caller that draws something behind the words (a
+    /// plate sized to the lines) before the words themselves.
+    public static func layout(
+        text: String,
+        style: TextStyle,
+        in region: CGRect,
+        verticalAlignment: String,
+        scale: CGFloat
+    ) -> TextFit? {
+        fitted(text: text, style: style, brand: BrandKit(), in: region,
+               verticalAlignment: verticalAlignment, scale: scale)?.fit
+    }
+
+    /// The fitted block: the auto-shrink loop, then the frame placed by
+    /// vertical alignment.
+    static func fitted(
         text: String,
         style: TextStyle,
         brand: BrandKit,
         in region: CGRect,
         verticalAlignment: String,
-        context: CGContext,
-        scale: CGFloat,
-        collector: WarningCollector? = nil
-    ) {
-        guard !text.isEmpty, region.width > 1, region.height > 1 else { return }
+        scale: CGFloat
+    ) -> (fit: TextFit, attributed: CFAttributedString, frame: CTFrame, frameRect: CGRect, size: Double)? {
+        guard !text.isEmpty, region.width > 1, region.height > 1 else { return nil }
 
         var size = style.size * Double(scale)
         let minimum = style.minimumSize * Double(scale)
@@ -38,11 +68,13 @@ enum TextDrawer {
         /// floor is reached. Steps of 6% keep the loop short and the size
         /// changes invisible. A single word must additionally fit on ONE
         /// line — height-only fitting happily wraps "Ubiquitou / s" and
-        /// calls it done, which is worse than a smaller word.
+        /// calls it done, which is worse than a smaller word. A style with
+        /// `maxLines` must also wrap to no more lines than that.
         let mustNotWrap = !text.contains(where: \.isWhitespace)
         func fits() -> Bool {
             if height > region.height { return false }
             if mustNotWrap, measuredWidth(attributed) > region.width { return false }
+            if let maxLines = style.maxLines, lineCount(attributed, width: region.width) > maxLines { return false }
             return true
         }
         while style.autoShrink, !fits(), size > minimum {
@@ -50,9 +82,7 @@ enum TextDrawer {
             attributed = attributedString(text: text, style: style, brand: brand, pointSize: size)
             height = measuredHeight(attributed, width: region.width)
         }
-        if !fits(), let collector {
-            collector.report(style.autoShrink ? .shrunkToFloor(text: text) : .overflow(text: text))
-        }
+        let fitted = fits()
 
         let textHeight = min(height, region.height)
         let y: CGFloat
@@ -70,6 +100,31 @@ enum TextDrawer {
             CGPath(rect: frameRect, transform: nil),
             nil
         )
+        let fit = TextFit(pointSize: size, fits: fitted, lineCount: lineCount(attributed, width: region.width),
+                          frame: frameRect, lineRects: lineRects(of: frame, in: frameRect))
+        return (fit, attributed, frame, frameRect, size)
+    }
+
+    /// Draw `text` inside `region` (a CoreGraphics rect, origin bottom-left).
+    @discardableResult
+    static func draw(
+        text: String,
+        style: TextStyle,
+        brand: BrandKit,
+        in region: CGRect,
+        verticalAlignment: String,
+        context: CGContext,
+        scale: CGFloat,
+        collector: WarningCollector? = nil
+    ) -> TextFit? {
+        guard let fitted = fitted(text: text, style: style, brand: brand, in: region,
+                                  verticalAlignment: verticalAlignment, scale: scale) else { return nil }
+        if !fitted.fit.fits, let collector {
+            collector.report(style.autoShrink ? .shrunkToFloor(text: text) : .overflow(text: text))
+        }
+        let size = fitted.size
+        let frameRect = fitted.frameRect
+        let frame = fitted.frame
 
         context.saveGState()
         context.textMatrix = .identity
@@ -166,6 +221,30 @@ enum TextDrawer {
             CTFrameDraw(frame, context)
         }
         context.restoreGState()
+        return fitted.fit
+    }
+
+    /// How many lines `attributed` wraps to at `width`.
+    static func lineCount(_ attributed: CFAttributedString, width: CGFloat) -> Int {
+        let framesetter = CTFramesetterCreateWithAttributedString(attributed)
+        let frame = CTFramesetterCreateFrame(
+            framesetter, CFRange(location: 0, length: 0),
+            CGPath(rect: CGRect(x: 0, y: 0, width: width, height: 1_000_000), transform: nil), nil
+        )
+        return (CTFrameGetLines(frame) as? [CTLine])?.count ?? 0
+    }
+
+    /// Each drawn line's typographic bounds, in the context's coordinates.
+    static func lineRects(of frame: CTFrame, in frameRect: CGRect) -> [CGRect] {
+        guard let lines = CTFrameGetLines(frame) as? [CTLine], !lines.isEmpty else { return [] }
+        var origins = [CGPoint](repeating: .zero, count: lines.count)
+        CTFrameGetLineOrigins(frame, CFRange(location: 0, length: 0), &origins)
+        return zip(lines, origins).map { line, origin in
+            var ascent: CGFloat = 0, descent: CGFloat = 0, leading: CGFloat = 0
+            let width = CGFloat(CTLineGetTypographicBounds(line, &ascent, &descent, &leading))
+            return CGRect(x: frameRect.minX + origin.x, y: frameRect.minY + origin.y - descent,
+                          width: width, height: ascent + descent)
+        }
     }
 
     /// One rounded background per line, padded a little beyond the glyphs.

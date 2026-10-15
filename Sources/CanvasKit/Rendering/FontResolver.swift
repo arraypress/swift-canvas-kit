@@ -46,7 +46,7 @@ public enum FontResolver {
     ]
 
     /// Resolve a family + weight + size to a concrete font.
-    static func font(family: String?, weight: String, size: CGFloat) -> CTFont {
+    public static func font(family: String?, weight: String, size: CGFloat) -> CTFont {
         let trait = weights[weight.lowercased()] ?? 0.0
 
         var attributes: [CFString: Any] = [

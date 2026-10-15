@@ -17,6 +17,9 @@ device frames, bezel masks, screenshot sets) and
 reels: 432 templates, brands, the `reel` CLI). Both were born as one
 codebase, forked, and grew apart by hand — the same stereo beat-sync bug
 was fixed twice in one day, which is the whole argument for this package.
+[swift-design-kit](../swift-design-kit) (cover art, flyers, posters) draws
+its words, plates and photographs through the public pieces below rather
+than a second text engine.
 
 **Deliberately not here:** templates, template libraries, styles, CLIs.
 A template gallery is a product's voice; this is the throat. The kits own
@@ -41,6 +44,12 @@ what their decks *say*; this owns how a deck becomes pixels.
   hides: shrink-floor hits, overflow, unfilled tokens, unreadable images,
   broken grades, invisible contrast, and text under platform chrome
   (`Resources/safe-zones.json`).
+- **Public pieces for other compositors** — `TextDrawer.draw` / `layout`
+  (style, region, scale → a `TextFit`: the size after auto-shrink, whether
+  it fitted, line count, each line's bounds; `TextStyle.maxLines` caps the
+  wrap), `FontResolver.font`, and the plate helpers on `SlideRenderer`:
+  `loadImage` (EXIF orientation, PDF logos), `graded`, `blurred`,
+  `drawAspectFilled`, `renderWashes`, `adaptiveWashes`.
 - **Export** — numbered PNG sets (with the audit from the same pass) and
   the stitched MP4: transitions, Ken Burns, entrances, narration, music
   bed, synthesized transition SFX, beat-synced cuts. BT.709-tagged, and a

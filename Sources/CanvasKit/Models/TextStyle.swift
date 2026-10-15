@@ -97,6 +97,10 @@ public struct TextStyle: Codable, Equatable, Sendable {
     /// The floor for `autoShrink`.
     public var minimumSize: Double
 
+    /// The most lines the text may wrap to; `autoShrink` shrinks until it
+    /// wraps to no more. `nil` means no limit — height alone decides.
+    public var maxLines: Int?
+
     /// How thick the stroke is, as a percentage of the point size — 3 to 4
     /// reads well at display sizes. `0` means no stroke at all.
     public var strokeWidth: Double
@@ -149,7 +153,8 @@ public struct TextStyle: Codable, Equatable, Sendable {
         strokeWidth: Double = 0,
         strokeStyle: StrokeStyle = .hollow,
         strokeColor: SlideColor? = nil,
-        gradientColors: [SlideColor]? = nil
+        gradientColors: [SlideColor]? = nil,
+        maxLines: Int? = nil
     ) {
         self.fontFamily = fontFamily
         self.weight = weight
@@ -173,6 +178,7 @@ public struct TextStyle: Codable, Equatable, Sendable {
         self.strokeStyle = strokeStyle
         self.strokeColor = strokeColor
         self.gradientColors = gradientColors
+        self.maxLines = maxLines
     }
 
     /// Tolerant decoding: every field has a default, so template JSON only
@@ -202,6 +208,7 @@ public struct TextStyle: Codable, Equatable, Sendable {
         strokeStyle = try container.decodeIfPresent(StrokeStyle.self, forKey: .strokeStyle) ?? .hollow
         strokeColor = try container.decodeIfPresent(SlideColor.self, forKey: .strokeColor)
         gradientColors = try container.decodeIfPresent([SlideColor].self, forKey: .gradientColors)
+        maxLines = try container.decodeIfPresent(Int.self, forKey: .maxLines)
     }
 }
 

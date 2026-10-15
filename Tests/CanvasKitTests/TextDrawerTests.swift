@@ -180,3 +180,62 @@ final class TemplateDataDecodingTests: XCTestCase {
         XCTAssertTrue(data.items.isEmpty)
     }
 }
+
+// MARK: - The public layout (0.4.0)
+
+final class TextLayoutTests: XCTestCase {
+
+    private let region = CGRect(x: 0, y: 0, width: 600, height: 400)
+
+    func testLayoutReportsSizeLinesAndFit() throws {
+        let style = TextStyle(size: 40, autoShrink: false)
+        let fit = try XCTUnwrap(TextDrawer.layout(text: "One two three", style: style, in: region,
+                                                  verticalAlignment: "top", scale: 1))
+        XCTAssertEqual(fit.pointSize, 40)
+        XCTAssertTrue(fit.fits)
+        XCTAssertEqual(fit.lineCount, 1)
+        XCTAssertEqual(fit.lineRects.count, 1)
+        let line = try XCTUnwrap(fit.linesBounds)
+        XCTAssertTrue(region.insetBy(dx: 0, dy: -2).contains(line), "\(line)")
+        // The frame carries 2 px of slack above the text, as it always has.
+        XCTAssertEqual(fit.frame.maxY - 2, region.maxY, accuracy: 0.001, "top alignment hangs from the top")
+    }
+
+    func testMaxLinesShrinksUntilTheTextWrapsToThatMany() throws {
+        let text = "A long title that wraps across several lines at this size"
+        let free = try XCTUnwrap(TextDrawer.layout(text: text, style: TextStyle(size: 90, minimumSize: 10),
+                                                   in: region, verticalAlignment: "top", scale: 1))
+        XCTAssertGreaterThan(free.lineCount, 2)
+        let limited = try XCTUnwrap(TextDrawer.layout(text: text, style: TextStyle(size: 90, minimumSize: 10, maxLines: 2),
+                                                      in: region, verticalAlignment: "top", scale: 1))
+        XCTAssertLessThanOrEqual(limited.lineCount, 2)
+        XCTAssertTrue(limited.fits)
+        XCTAssertLessThan(limited.pointSize, free.pointSize)
+    }
+
+    func testAFloorThatCannotFitIsReported() throws {
+        let fit = try XCTUnwrap(TextDrawer.layout(text: "Words words words words", style: TextStyle(size: 200, minimumSize: 150, maxLines: 1),
+                                                  in: region, verticalAlignment: "middle", scale: 1))
+        XCTAssertFalse(fit.fits)
+        XCTAssertEqual(fit.pointSize, 150, accuracy: 0.001)
+    }
+
+    func testDrawReturnsTheSameFitAsLayout() throws {
+        let context = try XCTUnwrap(CGContext(data: nil, width: 600, height: 400, bitsPerComponent: 8, bytesPerRow: 0,
+                                              space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                              bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        let style = TextStyle(size: 60, maxLines: 2)
+        let drawn = TextDrawer.draw(text: "Night Drive", style: style, in: region, verticalAlignment: "bottom",
+                                    context: context, scale: 1)
+        let laid = TextDrawer.layout(text: "Night Drive", style: style, in: region, verticalAlignment: "bottom", scale: 1)
+        XCTAssertEqual(drawn, laid)
+        XCTAssertNil(TextDrawer.layout(text: "", style: style, in: region, verticalAlignment: "top", scale: 1))
+    }
+
+    func testMaxLinesRoundTripsAndDefaultsToNoLimit() throws {
+        XCTAssertNil(try JSONDecoder().decode(TextStyle.self, from: Data("{}".utf8)).maxLines)
+        let style = try JSONDecoder().decode(TextStyle.self, from: Data(#"{"maxLines": 2}"#.utf8))
+        XCTAssertEqual(style.maxLines, 2)
+        XCTAssertEqual(try JSONDecoder().decode(TextStyle.self, from: JSONEncoder().encode(style)), style)
+    }
+}

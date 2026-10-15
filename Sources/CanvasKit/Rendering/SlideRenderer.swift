@@ -392,7 +392,7 @@ public enum SlideRenderer {
     ///
     /// Video plates are measured once, on the poster frame — a scrim that
     /// breathed with every bright frame would flicker.
-    static func adaptiveWashes(
+    public static func adaptiveWashes(
         plate: CGImage,
         textRegions: [CGRect],
         canvas: Canvas,
@@ -471,7 +471,7 @@ public enum SlideRenderer {
     /// exporter bakes this once and draws it per frame between the decoded
     /// background and the content overlay. `nil` when there is nothing to
     /// draw.
-    static func renderWashes(
+    public static func renderWashes(
         dim: Double, scrim: Double, edge: ScrimEdge = .bottom, width: Int, height: Int
     ) -> CGImage? {
         guard dim > 0 || scrim > 0 else { return nil }
@@ -554,7 +554,7 @@ public enum SlideRenderer {
     /// The edges are clamped before blurring. A Gaussian samples past the
     /// bounds and reads transparent black out there, which leaves a dark band
     /// around a blurred image — the one artefact that gives the trick away.
-    static func blurred(_ image: CGImage, radius: Double) -> CGImage {
+    public static func blurred(_ image: CGImage, radius: Double) -> CGImage {
         guard radius > 0 else { return image }
 
         let input = CIImage(cgImage: image)
@@ -619,6 +619,12 @@ public enum SlideRenderer {
         }
     }
 
+    /// The plate, graded — throwing when the grade cannot be built (a LUT
+    /// that will not load), for a caller that reports rather than tolerates.
+    public static func graded(_ image: CGImage, with grade: VideoGrade) throws -> CGImage {
+        graded(image, using: try filter(for: grade), time: 0)
+    }
+
     /// The same, with a filter the caller already built — the video export
     /// bakes one filter per segment and grades every frame through it,
     /// because building a `GradeFilter` bakes a tone cube and doing that
@@ -629,7 +635,7 @@ public enum SlideRenderer {
         return ciContext.createCGImage(output, from: input.extent) ?? image
     }
 
-    static func drawAspectFilled(_ image: CGImage, in context: CGContext, bounds: CGRect) {
+    public static func drawAspectFilled(_ image: CGImage, in context: CGContext, bounds: CGRect) {
         let imageSize = CGSize(width: image.width, height: image.height)
         let scale = max(bounds.width / imageSize.width, bounds.height / imageSize.height)
         let drawSize = CGSize(width: imageSize.width * scale, height: imageSize.height * scale)
@@ -643,7 +649,9 @@ public enum SlideRenderer {
         context.restoreGState()
     }
 
-    private static func loadImage(at path: String) -> CGImage? {
+    /// An image file as drawn: EXIF orientation applied, and a PDF's first
+    /// page rasterised at 4× (vector logos). `nil` when it cannot be read.
+    public static func loadImage(at path: String) -> CGImage? {
         let url = URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
         if let source = CGImageSourceCreateWithURL(url as CFURL, nil) {
             if let image = orientedImage(from: source) {
