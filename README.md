@@ -47,7 +47,7 @@ what their decks *say*; this owns how a deck becomes pixels.
 - **Public pieces for other compositors** — `TextDrawer.draw` / `layout`
   (style, region, scale → a `TextFit`: the size after auto-shrink, whether
   it fitted, line count, each line's bounds; `TextStyle.maxLines` caps the
-  wrap), `FontResolver.font`, and the plate helpers on `SlideRenderer`:
+  wrap and `keepsWordsWhole` shrinks rather than break a word mid-way), `FontResolver.font`, and the plate helpers on `SlideRenderer`:
   `loadImage` (EXIF orientation, PDF logos), `graded`, `blurred`,
   `drawAspectFilled`, `renderWashes`, `adaptiveWashes`.
 - **Export** — numbered PNG sets (with the audit from the same pass) and

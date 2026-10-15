@@ -101,6 +101,13 @@ public struct TextStyle: Codable, Equatable, Sendable {
     /// wraps to no more. `nil` means no limit — height alone decides.
     public var maxLines: Int?
 
+    /// Shrink until no word has to break across lines. CoreText breaks a
+    /// word that is wider than the region mid-word ("FREQUEN / CY"); a
+    /// single-word block is always kept whole, and with this so is every
+    /// word of a longer one. Off by default — the slide gallery is tuned
+    /// without it.
+    public var keepsWordsWhole: Bool
+
     /// How thick the stroke is, as a percentage of the point size — 3 to 4
     /// reads well at display sizes. `0` means no stroke at all.
     public var strokeWidth: Double
@@ -154,7 +161,8 @@ public struct TextStyle: Codable, Equatable, Sendable {
         strokeStyle: StrokeStyle = .hollow,
         strokeColor: SlideColor? = nil,
         gradientColors: [SlideColor]? = nil,
-        maxLines: Int? = nil
+        maxLines: Int? = nil,
+        keepsWordsWhole: Bool = false
     ) {
         self.fontFamily = fontFamily
         self.weight = weight
@@ -179,6 +187,7 @@ public struct TextStyle: Codable, Equatable, Sendable {
         self.strokeColor = strokeColor
         self.gradientColors = gradientColors
         self.maxLines = maxLines
+        self.keepsWordsWhole = keepsWordsWhole
     }
 
     /// Tolerant decoding: every field has a default, so template JSON only
@@ -209,6 +218,7 @@ public struct TextStyle: Codable, Equatable, Sendable {
         strokeColor = try container.decodeIfPresent(SlideColor.self, forKey: .strokeColor)
         gradientColors = try container.decodeIfPresent([SlideColor].self, forKey: .gradientColors)
         maxLines = try container.decodeIfPresent(Int.self, forKey: .maxLines)
+        keepsWordsWhole = try container.decodeIfPresent(Bool.self, forKey: .keepsWordsWhole) ?? false
     }
 }
 

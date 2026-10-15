@@ -71,10 +71,16 @@ public enum TextDrawer {
         /// calls it done, which is worse than a smaller word. A style with
         /// `maxLines` must also wrap to no more lines than that.
         let mustNotWrap = !text.contains(where: \.isWhitespace)
+        let words = style.keepsWordsWhole ? text.split(whereSeparator: \.isWhitespace).map(String.init) : []
         func fits() -> Bool {
             if height > region.height { return false }
             if mustNotWrap, measuredWidth(attributed) > region.width { return false }
             if let maxLines = style.maxLines, lineCount(attributed, width: region.width) > maxLines { return false }
+            if style.keepsWordsWhole, !mustNotWrap {
+                for word in words where measuredWidth(attributedString(text: word, style: style, brand: brand, pointSize: size)) > region.width {
+                    return false
+                }
+            }
             return true
         }
         while style.autoShrink, !fits(), size > minimum {

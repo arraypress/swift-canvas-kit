@@ -232,6 +232,18 @@ final class TextLayoutTests: XCTestCase {
         XCTAssertNil(TextDrawer.layout(text: "", style: style, in: region, verticalAlignment: "top", scale: 1))
     }
 
+    func testKeepsWordsWholeShrinksUntilNoWordBreaks() throws {
+        let narrow = CGRect(x: 0, y: 0, width: 400, height: 600)
+        let text = "LOW FREQUENCY"
+        let broken = try XCTUnwrap(TextDrawer.layout(text: text, style: TextStyle(weight: "black", size: 120, minimumSize: 10),
+                                                     in: narrow, verticalAlignment: "top", scale: 1))
+        XCTAssertGreaterThan(broken.lineCount, 2, "without it the long word breaks across lines")
+        let whole = try XCTUnwrap(TextDrawer.layout(text: text, style: TextStyle(weight: "black", size: 120, minimumSize: 10, keepsWordsWhole: true),
+                                                    in: narrow, verticalAlignment: "top", scale: 1))
+        XCTAssertEqual(whole.lineCount, 2)
+        XCTAssertLessThan(whole.pointSize, broken.pointSize)
+    }
+
     func testMaxLinesRoundTripsAndDefaultsToNoLimit() throws {
         XCTAssertNil(try JSONDecoder().decode(TextStyle.self, from: Data("{}".utf8)).maxLines)
         let style = try JSONDecoder().decode(TextStyle.self, from: Data(#"{"maxLines": 2}"#.utf8))
