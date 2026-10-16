@@ -5,6 +5,7 @@
 //  Created by David Sherlock on 2026.
 //
 
+import CoreText
 import XCTest
 
 @testable import CanvasKit
@@ -249,5 +250,22 @@ final class TextLayoutTests: XCTestCase {
         let style = try JSONDecoder().decode(TextStyle.self, from: Data(#"{"maxLines": 2}"#.utf8))
         XCTAssertEqual(style.maxLines, 2)
         XCTAssertEqual(try JSONDecoder().decode(TextStyle.self, from: JSONEncoder().encode(style)), style)
+    }
+}
+
+// MARK: - Light weights
+
+final class LightWeightTests: XCTestCase {
+
+    /// `light` and `thin` reach the light faces of a family that has them;
+    /// before 0.6 they fell through to regular.
+    func testLightAndThinReachTheLightFaces() throws {
+        guard FontResolver.isAvailable("Helvetica Neue") else { throw XCTSkip("Helvetica Neue is not installed") }
+        let light = CTFontCopyPostScriptName(FontResolver.font(family: "Helvetica Neue", weight: "light", size: 20)) as String
+        let thin = CTFontCopyPostScriptName(FontResolver.font(family: "Helvetica Neue", weight: "thin", size: 20)) as String
+        let regular = CTFontCopyPostScriptName(FontResolver.font(family: "Helvetica Neue", weight: "regular", size: 20)) as String
+        XCTAssertTrue(light.contains("Light"), light)
+        XCTAssertTrue(thin.contains("Thin") || thin.contains("UltraLight"), thin)
+        XCTAssertFalse(regular.contains("Light"), regular)
     }
 }

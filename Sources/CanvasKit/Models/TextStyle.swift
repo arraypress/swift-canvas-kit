@@ -23,8 +23,8 @@ public struct TextStyle: Codable, Equatable, Sendable {
     /// brand doesn't set one.
     public var fontFamily: String?
 
-    /// Weight, in font-descriptor terms: `"regular"`, `"medium"`,
-    /// `"semibold"`, `"bold"`, `"heavy"`, `"black"`.
+    /// Weight, in font-descriptor terms: `"ultralight"`, `"thin"`, `"light"`,
+    /// `"regular"`, `"medium"`, `"semibold"`, `"bold"`, `"heavy"`, `"black"`.
     public var weight: String
 
     /// Point size at the reference width.

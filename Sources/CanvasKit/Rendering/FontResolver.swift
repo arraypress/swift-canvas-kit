@@ -37,6 +37,9 @@ public enum FontResolver {
 
     /// Weight names templates use, mapped to descriptor trait values.
     private static let weights: [String: CGFloat] = [
+        "ultralight": -0.8,
+        "thin": -0.6,
+        "light": -0.4,
         "regular": 0.0,
         "medium": 0.23,
         "semibold": 0.30,
