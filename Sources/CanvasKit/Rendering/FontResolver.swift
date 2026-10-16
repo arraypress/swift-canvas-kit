@@ -71,4 +71,54 @@ public enum FontResolver {
         let system = CTFontCreateUIFontForLanguage(.system, size, nil) ?? CTFontCreateWithName("Helvetica" as CFString, size, nil)
         return CTFontCreateCopyWithAttributes(system, size, nil, descriptor)
     }
+
+    /// `font` with variable-font axes set (`wght`, `wdth`, `slnt`, `opsz`,
+    /// or the font's own tags) and OpenType features turned on or off
+    /// (`smcp`: 1, `liga`: 0). Nothing asked for returns the font as it is;
+    /// an axis or feature the face lacks is ignored by CoreText.
+    public static func applying(variations: [String: Double]?, features: [String: Int]?, to font: CTFont) -> CTFont {
+        var attributes: [CFString: Any] = [:]
+        if let variations, !variations.isEmpty {
+            var axes: [Int: Double] = [:]
+            for (tag, value) in variations {
+                if let number = FontTags.number(tag) { axes[number] = value }
+            }
+            if !axes.isEmpty { attributes[kCTFontVariationAttribute] = axes }
+        }
+        if let features, !features.isEmpty {
+            attributes[kCTFontFeatureSettingsAttribute] = features.keys.sorted().map {
+                [kCTFontOpenTypeFeatureTag: $0, kCTFontOpenTypeFeatureValue: features[$0] ?? 1] as [CFString: Any]
+            }
+        }
+        guard !attributes.isEmpty else { return font }
+        let descriptor = CTFontDescriptorCreateWithAttributes(attributes as CFDictionary)
+        return CTFontCreateCopyWithAttributes(font, CTFontGetSize(font), nil, descriptor)
+    }
+
+    /// The variation axes a face has: tag, smallest, largest, default.
+    public static func axes(of font: CTFont) -> [(tag: String, minimum: Double, maximum: Double, defaultValue: Double)] {
+        (CTFontCopyVariationAxes(font) as? [[CFString: Any]] ?? []).compactMap { axis in
+            guard let number = (axis[kCTFontVariationAxisIdentifierKey] as? NSNumber)?.intValue else { return nil }
+            return (FontTags.text(number),
+                    (axis[kCTFontVariationAxisMinimumValueKey] as? NSNumber)?.doubleValue ?? 0,
+                    (axis[kCTFontVariationAxisMaximumValueKey] as? NSNumber)?.doubleValue ?? 0,
+                    (axis[kCTFontVariationAxisDefaultValueKey] as? NSNumber)?.doubleValue ?? 0)
+        }
+    }
+}
+
+/// Four-letter OpenType tags and the numbers CoreText keys axes by.
+public enum FontTags {
+
+    /// `wght` as its big-endian four-character code; `nil` unless four ASCII characters.
+    public static func number(_ tag: String) -> Int? {
+        let bytes = Array(tag.utf8)
+        guard bytes.count == 4, bytes.allSatisfy({ $0 >= 32 && $0 < 127 }) else { return nil }
+        return bytes.reduce(0) { $0 << 8 | Int($1) }
+    }
+
+    /// The tag a four-character code spells.
+    public static func text(_ number: Int) -> String {
+        String(decoding: (0..<4).reversed().map { UInt8((number >> ($0 * 8)) & 0xFF) }, as: UTF8.self)
+    }
 }

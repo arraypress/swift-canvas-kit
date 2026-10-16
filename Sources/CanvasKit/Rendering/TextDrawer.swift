@@ -147,7 +147,7 @@ public enum TextDrawer {
             context.setShadow(
                 offset: CGSize(width: 0, height: -style.shadowOffsetY * scale),
                 blur: style.shadowBlur * scale,
-                color: shadow.cgColor
+                color: Inks.converted(shadow.cgColor)
             )
         }
 
@@ -165,8 +165,8 @@ public enum TextDrawer {
             context.setTextDrawingMode(.clip)
             CTFrameDraw(frame, context)
             if let fill = CGGradient(
-                colorsSpace: CGColorSpace(name: CGColorSpace.sRGB),
-                colors: gradient.map(\.cgColor) as CFArray,
+                colorsSpace: Inks.space ?? CGColorSpace(name: CGColorSpace.sRGB),
+                colors: gradient.map { Inks.converted($0.cgColor) } as CFArray,
                 locations: nil
             ) {
                 context.drawLinearGradient(
@@ -273,7 +273,7 @@ public enum TextDrawer {
         /// OPAQUE inside one transparency layer, then compositing the
         /// layer at the pill's alpha, keeps the block one even tone and
         /// merges touching pills into a single clean shape.
-        let pillColor = color.cgColor
+        let pillColor = Inks.converted(color.cgColor)
         let pillAlpha = pillColor.alpha
         context.saveGState()
         if pillAlpha < 1 {
@@ -367,7 +367,7 @@ public enum TextDrawer {
     /// - Parameter strokeOverride: Replaces the style's stroke width for
     ///   this pass. `outlined` text is drawn twice — a keyline pass and a
     ///   fill pass — and each needs a different width from the same style.
-    private static func attributedString(
+    static func attributedString(
         text: String,
         style: TextStyle,
         brand: BrandKit,
@@ -377,41 +377,49 @@ public enum TextDrawer {
         let content = style.uppercased ? text.uppercased() : text
         let segments = parseAccents(in: content)
 
-        let font = FontResolver.font(
+        let upright = FontResolver.font(
             family: style.fontFamily ?? brand.fontFamily,
             weight: style.weight,
             size: pointSize
         )
+        let font = FontResolver.applying(variations: style.variations, features: style.features, to: upright)
         /// The italic face, made once — CoreText falls back to the upright
         /// font when the family has no oblique.
-        let italicFont = CTFontCreateCopyWithSymbolicTraits(font, 0, nil, .traitItalic, .traitItalic) ?? font
+        let italicFont = FontResolver.applying(
+            variations: style.variations, features: style.features,
+            to: CTFontCreateCopyWithSymbolicTraits(upright, 0, nil, .traitItalic, .traitItalic) ?? upright
+        )
 
         /// The accent face, when emphasis means heavier rather than another
         /// colour — the magazine idiom, where a phrase inside a paragraph is
         /// picked out in the same ink and a heavier weight.
-        let accentFont = style.accentWeight.map {
+        let accentUpright = style.accentWeight.map {
             FontResolver.font(
                 family: style.fontFamily ?? brand.fontFamily,
                 weight: $0,
                 size: pointSize
             )
         }
-        let accentItalicFont = accentFont.map {
-            CTFontCreateCopyWithSymbolicTraits($0, 0, nil, .traitItalic, .traitItalic) ?? $0
+        let accentFont = accentUpright.map {
+            FontResolver.applying(variations: style.variations, features: style.features, to: $0)
+        }
+        let accentItalicFont = accentUpright.map {
+            FontResolver.applying(variations: style.variations, features: style.features,
+                                  to: CTFontCreateCopyWithSymbolicTraits($0, 0, nil, .traitItalic, .traitItalic) ?? $0)
         }
 
-        let baseColor = (style.color ?? brand.textColor).cgColor
+        let baseColor = Inks.converted((style.color ?? brand.textColor).cgColor)
 
         /// A weight was asked for and a colour was not: emphasis is the
         /// weight, and the run keeps the body's ink. Asking to embolden is
         /// not asking to recolour as well.
-        let accentColor = style.accentColor?.cgColor
-            ?? (style.accentWeight == nil ? brand.accentColor.cgColor : baseColor)
+        let accentColor = style.accentColor.map { Inks.converted($0.cgColor) }
+            ?? (style.accentWeight == nil ? Inks.converted(brand.accentColor.cgColor) : baseColor)
 
         /// No fallback to a computed grey: a tier the style has not defined
         /// leaves `~spans~` at the body colour, so the marker is inert rather
         /// than silently introducing a colour nobody chose.
-        let mutedColor = style.mutedColor?.cgColor
+        let mutedColor = style.mutedColor.map { Inks.converted($0.cgColor) }
 
         let alignment: CTTextAlignment
         switch style.alignment {
@@ -489,7 +497,7 @@ public enum TextDrawer {
                     result, range, kCTStrokeColorAttributeName,
                     segment.accented
                         ? accentColor
-                        : (style.strokeColor ?? style.color ?? brand.textColor).cgColor
+                        : Inks.converted((style.strokeColor ?? style.color ?? brand.textColor).cgColor)
                 )
             }
             if segment.accented, style.underlineAccents {
@@ -517,8 +525,68 @@ public enum TextDrawer {
             }
         }
 
+        if let characterStyles = style.characterStyles, !characterStyles.isEmpty {
+            applyCharacterStyles(characterStyles, to: result, style: style, brand: brand, pointSize: pointSize,
+                                 strokeWidth: strokeOverride ?? style.strokeWidth)
+        }
         CFAttributedStringEndEditing(result)
         return result
+    }
+
+    /// Ranges of characters restyled: colour, size, weight, baseline,
+    /// tracking. Positions count characters (graphemes) of the drawn text.
+    private static func applyCharacterStyles(
+        _ styles: [CharacterStyle],
+        to result: CFMutableAttributedString,
+        style: TextStyle,
+        brand: BrandKit,
+        pointSize: Double,
+        strokeWidth: Double
+    ) {
+        let drawn = CFAttributedStringGetString(result) as String
+        let offsets = CharacterOffsets(drawn)
+        for character in styles {
+            guard let range = offsets.utf16Range(start: character.start, length: character.length) else { continue }
+            if let color = character.color {
+                CFAttributedStringSetAttribute(result, range, kCTForegroundColorAttributeName, Inks.converted(color.cgColor))
+                if strokeWidth > 0, style.strokeColor == nil {
+                    CFAttributedStringSetAttribute(result, range, kCTStrokeColorAttributeName, Inks.converted(color.cgColor))
+                }
+            }
+            if character.scale != nil || character.weight != nil {
+                /// Each font run inside the range keeps its own face (italic,
+                /// accent) and takes the new size and weight.
+                var location = range.location
+                while location < range.location + range.length {
+                    var effective = CFRange(location: 0, length: 0)
+                    let existing = CFAttributedStringGetAttribute(result, location, kCTFontAttributeName, &effective)
+                    let end = min(range.location + range.length, effective.location + effective.length)
+                    let run = CFRange(location: location, length: max(1, end - location))
+                    let size = pointSize * (character.scale ?? 1)
+                    var face: CTFont
+                    if let weight = character.weight {
+                        face = FontResolver.font(family: style.fontFamily ?? brand.fontFamily, weight: weight, size: size)
+                        if let existing, CFGetTypeID(existing) == CTFontGetTypeID(),
+                           CTFontGetSymbolicTraits(existing as! CTFont).contains(.traitItalic) {
+                            face = CTFontCreateCopyWithSymbolicTraits(face, size, nil, .traitItalic, .traitItalic) ?? face
+                        }
+                        face = FontResolver.applying(variations: style.variations, features: style.features, to: face)
+                    } else if let existing, CFGetTypeID(existing) == CTFontGetTypeID() {
+                        face = CTFontCreateCopyWithAttributes(existing as! CTFont, size, nil, nil)
+                    } else {
+                        face = FontResolver.font(family: style.fontFamily ?? brand.fontFamily, weight: style.weight, size: size)
+                    }
+                    CFAttributedStringSetAttribute(result, run, kCTFontAttributeName, face)
+                    location = end > location ? end : location + 1
+                }
+            }
+            if let baseline = character.baseline, baseline != 0 {
+                CFAttributedStringSetAttribute(result, range, kCTBaselineOffsetAttributeName, (baseline * pointSize) as CFNumber)
+            }
+            if let tracking = character.tracking {
+                CFAttributedStringSetAttribute(result, range, kCTKernAttributeName, (tracking / 1000 * pointSize) as CFNumber)
+            }
+        }
     }
 
     struct Run: Equatable {

@@ -38,7 +38,22 @@ what their decks *say*; this owns how a deck becomes pixels.
   what legibility actually costs.
 - **Text** — pure CoreText: `**accent**`/`*italic*`/`#hashtag` markup,
   accent weights, hollow and outlined strokes, gradient glyphs, line
-  pills, auto-shrink with a one-line rule for single words.
+  pills, auto-shrink with a one-line rule for single words. 0.7 adds
+  `TextStyle.variations` (variable-font axes by tag: `wght`, `wdth`, `slnt`,
+  `opsz`, or a font's own), `.features` (OpenType features by tag, on or off:
+  `smcp`, `liga`, `tnum`, `onum`, `ss01`…) and `.characterStyles` (a colour,
+  size, weight, baseline lift and tracking for a range of characters, counted
+  in graphemes of the drawn text).
+- **Outlines** — `TextDrawer.outlines` hands back a block exactly as `draw`
+  lays it out, as glyph outlines (each where it lands, in its colour, with the
+  character it draws) and lines with their runs (face, size, weight, colour,
+  position) — for words bent along a path, extruded, stroked inside, or
+  written into SVG as text; `TextDrawer.line` sets one unwrapped line.
+  Measured: filled outlines match the drawn words within 2% of the ink (font
+  smoothing off; the difference is antialiasing).
+- **Inks** — `Inks.space` (a task-local colour space): set it and every
+  colour TextDrawer puts down is converted into it by ColorSync first — how a
+  CMYK print file gets CMYK words.
 - **Rendering** — one deterministic `SlideRenderer.render` every output
   format calls; the audit (`SlideRenderer.audit`) reports what tolerance
   hides: shrink-floor hits, overflow, unfilled tokens, unreadable images,

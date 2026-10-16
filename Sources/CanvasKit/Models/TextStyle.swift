@@ -128,6 +128,21 @@ public struct TextStyle: Codable, Equatable, Sendable {
     /// flat fill. Composes with `shadowColor` — the glow draws beneath.
     public var gradientColors: [SlideColor]?
 
+    /// Variable-font axes by their four-letter tag — `wght`, `wdth`, `slnt`,
+    /// `opsz`, or a font's own (`SOFT`, `WONK`). A face without the axis
+    /// ignores it. `nil` draws the face's named instance as it is.
+    public var variations: [String: Double]?
+
+    /// OpenType features by tag, `1` on and `0` off — `smcp` small capitals,
+    /// `liga` ligatures, `tnum` tabular figures, `onum` old-style figures,
+    /// `ss01` a stylistic set. A face without the feature ignores it.
+    public var features: [String: Int]?
+
+    /// Styling for ranges of characters — a colour, a size, a lift off the
+    /// baseline — counted in the characters drawn (markup removed, after
+    /// uppercasing). Applied in order, later ranges over earlier ones.
+    public var characterStyles: [CharacterStyle]?
+
     /// See ``TextStyle/strokeStyle``.
     public enum StrokeStyle: String, Codable, Equatable, Sendable, CaseIterable {
 
@@ -162,7 +177,10 @@ public struct TextStyle: Codable, Equatable, Sendable {
         strokeColor: SlideColor? = nil,
         gradientColors: [SlideColor]? = nil,
         maxLines: Int? = nil,
-        keepsWordsWhole: Bool = false
+        keepsWordsWhole: Bool = false,
+        variations: [String: Double]? = nil,
+        features: [String: Int]? = nil,
+        characterStyles: [CharacterStyle]? = nil
     ) {
         self.fontFamily = fontFamily
         self.weight = weight
@@ -188,6 +206,9 @@ public struct TextStyle: Codable, Equatable, Sendable {
         self.gradientColors = gradientColors
         self.maxLines = maxLines
         self.keepsWordsWhole = keepsWordsWhole
+        self.variations = variations
+        self.features = features
+        self.characterStyles = characterStyles
     }
 
     /// Tolerant decoding: every field has a default, so template JSON only
@@ -219,6 +240,9 @@ public struct TextStyle: Codable, Equatable, Sendable {
         gradientColors = try container.decodeIfPresent([SlideColor].self, forKey: .gradientColors)
         maxLines = try container.decodeIfPresent(Int.self, forKey: .maxLines)
         keepsWordsWhole = try container.decodeIfPresent(Bool.self, forKey: .keepsWordsWhole) ?? false
+        variations = try container.decodeIfPresent([String: Double].self, forKey: .variations)
+        features = try container.decodeIfPresent([String: Int].self, forKey: .features)
+        characterStyles = try container.decodeIfPresent([CharacterStyle].self, forKey: .characterStyles)
     }
 }
 
@@ -229,5 +253,44 @@ public extension TextStyle {
         var style = self
         style.alignment = "center"
         return style
+    }
+}
+
+/// How a range of characters in a text block differs from the block: its
+/// colour, its size, its weight, how far it sits off the baseline, its
+/// tracking. Positions count the characters drawn (`"Ä"` is one).
+public struct CharacterStyle: Codable, Equatable, Sendable, Hashable {
+
+    /// The first character, from 0.
+    public var start: Int
+
+    /// How many characters.
+    public var length: Int
+
+    /// Their colour; `nil` keeps the block's.
+    public var color: SlideColor?
+
+    /// Their size as a multiple of the block's (`1.4` is 40% larger).
+    public var scale: Double?
+
+    /// Their weight (`"black"`); `nil` keeps the block's.
+    public var weight: String?
+
+    /// How far they sit above the baseline, as a fraction of the block's
+    /// size (negative drops them).
+    public var baseline: Double?
+
+    /// Extra space after each, in thousandths of the block's size.
+    public var tracking: Double?
+
+    public init(start: Int, length: Int, color: SlideColor? = nil, scale: Double? = nil, weight: String? = nil,
+                baseline: Double? = nil, tracking: Double? = nil) {
+        self.start = start
+        self.length = length
+        self.color = color
+        self.scale = scale
+        self.weight = weight
+        self.baseline = baseline
+        self.tracking = tracking
     }
 }
